@@ -5,8 +5,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.ws.server.endpoint.annotation.Endpoint;
+import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
+import org.springframework.ws.server.endpoint.annotation.RequestPayload;
+import org.springframework.ws.server.endpoint.annotation.ResponsePayload;
 import ru.nsu.ccfit.schema.crack_hash_request.CrackHashManagerRequest;
+import ru.nsu.ccfit.schema.crack_hash_response.CrackHashWorkerResponse;
 import ru.trushkov.crack_manager.model.CrackPasswordDto;
 import ru.trushkov.crack_manager.model.PasswordDto;
 import ru.trushkov.crack_manager.model.PasswordRequest;
@@ -26,7 +32,7 @@ public class ManagerService {
 
     private final ConcurrentHashMap<String, PasswordRequest> requests = new ConcurrentHashMap<>();
     private final RestTemplate restTemplate = new RestTemplate();
-    private final String resourceUrl1 = "http://localhost:42185/internal/api/worker/hash/crack/task";
+    private final String resourceUrl1 = "http://localhost:8081/internal/api/worker/hash/crack/task";
     private final String resourceUrl2 = "http://localhost:34579/internal/api/worker/hash/crack/task";
     private final String resourceUrl3 = "http://localhost:42461/internal/api/worker/hash/crack/task";
 
@@ -50,8 +56,8 @@ public class ManagerService {
 
     private void doRequests(CrackPasswordDto crackPasswordDto) {
         doRequest(crackPasswordDto, 0, 3, resourceUrl1);
-        doRequest(crackPasswordDto, 1, 3, resourceUrl2);
-        doRequest(crackPasswordDto, 2, 3, resourceUrl3);
+        //doRequest(crackPasswordDto, 1, 3, resourceUrl2);
+        //doRequest(crackPasswordDto, 2, 3, resourceUrl3);
     }
 
     private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count, String url) {

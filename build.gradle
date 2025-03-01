@@ -35,7 +35,10 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	implementation 'wsdl4j:wsdl4j'
-	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.16.1'
+
+	implementation 'javax.activation:activation:1.1'
+	implementation 'javax.xml.bind:jaxb-api:2.3.1'
+	implementation 'org.glassfish.jaxb:jaxb-runtime'
 
 	implementation 'org.glassfish.jaxb:jaxb-xjc'
 	jaxb 'org.glassfish.jaxb:jaxb-xjc:4.0.3'
@@ -58,7 +61,8 @@ sourceSets {
 
 task genJaxb {
 	ext.sourcesDir = "${buildDir}/generated-sources/jaxb"
-	ext.schema = "src/main/resources/crack_hash_manager_schema.xsd"
+	ext.schema1 = "src/main/resources/crack_hash_manager_schema.xsd"
+	ext.schema2 = "src/main/resources/crack_hash_worker_schema.xsd"
 
 	outputs.dir sourcesDir
 
@@ -68,7 +72,12 @@ task genJaxb {
 					classpath: configurations.jaxb.asPath
 			mkdir(dir: sourcesDir)
 
-			xjc(destdir: sourcesDir, schema: schema) {
+			xjc(destdir: sourcesDir, schema: schema1) {
+				arg(value: "-wsdl")
+				produces(dir: sourcesDir, includes: "**/*.java")
+			}
+
+			xjc(destdir: sourcesDir, schema: schema2) {
 				arg(value: "-wsdl")
 				produces(dir: sourcesDir, includes: "**/*.java")
 			}
