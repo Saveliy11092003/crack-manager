@@ -9,6 +9,7 @@ import ru.trushkov.crack_manager.service.ManagerService;
 
 @RestController
 @AllArgsConstructor
+@CrossOrigin(origins = "http://localhost:3000")
 @RequestMapping("/api/hash")
 public class ManagerController {
     private final ManagerService managerService;

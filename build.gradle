@@ -35,14 +35,24 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	implementation 'wsdl4j:wsdl4j'
-
-	implementation 'javax.activation:activation:1.1'
-	implementation 'javax.xml.bind:jaxb-api:2.3.1'
-	implementation 'org.glassfish.jaxb:jaxb-runtime'
+	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.16.1'
 
 	implementation 'org.glassfish.jaxb:jaxb-xjc'
 	jaxb 'org.glassfish.jaxb:jaxb-xjc:4.0.3'
 	jaxb 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
+
+	implementation 'com.github.dpaukov:combinatoricslib3:3.4.0'
+
+	implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml'
+	implementation 'com.fasterxml.jackson.module:jackson-module-jaxb-annotations'
+}
+
+jar {
+	manifest {
+		attributes(
+				'Main-Class': 'ru.trushkov.crack_manager.CrackManagerApplication'
+		)
+	}
 }
 
 bootJar {
@@ -66,25 +76,32 @@ task genJaxb {
 
 	outputs.dir sourcesDir
 
-	doLast() {
+	doLast {
+		// Создайте директории для каждой схемы
+		def schema1Dir = "${sourcesDir}/schema1"
+		def schema2Dir = "${sourcesDir}/schema2"
+
+		mkdir(schema1Dir)
+		mkdir(schema2Dir)
+
 		project.ant {
 			taskdef name: "xjc", classname: "com.sun.tools.xjc.XJCTask",
 					classpath: configurations.jaxb.asPath
-			mkdir(dir: sourcesDir)
 
-			xjc(destdir: sourcesDir, schema: schema1) {
+			// Генерация для первой схемы
+			xjc(destdir: schema1Dir, schema: schema1) {
 				arg(value: "-wsdl")
-				produces(dir: sourcesDir, includes: "**/*.java")
+				produces(dir: schema1Dir, includes: "**/*.java")
 			}
 
-			xjc(destdir: sourcesDir, schema: schema2) {
+			// Генерация для второй схемы
+			xjc(destdir: schema2Dir, schema: schema2) {
 				arg(value: "-wsdl")
-				produces(dir: sourcesDir, includes: "**/*.java")
+				produces(dir: schema2Dir, includes: "**/*.java")
 			}
 		}
 	}
 }
-
 compileJava.dependsOn genJaxb
 
 tasks.named('test') {

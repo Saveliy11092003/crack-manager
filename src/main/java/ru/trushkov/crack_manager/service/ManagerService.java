@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import static ru.trushkov.crack_manager.model.enumeration.Status.IN_PROGRESS;
 import static ru.trushkov.crack_manager.model.enumeration.Status.READY;
 
 @Service
@@ -33,9 +34,9 @@ public class ManagerService {
     private List<String> symbolsOfAlphabet;
 
     private final ConcurrentHashMap<String, PasswordRequest> requests = new ConcurrentHashMap<>();
-    private final String resourceUrl1 = "http://localhost:8081/internal/api/worker/hash/crack/task";
-    private final String resourceUrl2 = "http://localhost:34579/internal/api/worker/hash/crack/task";
-    private final String resourceUrl3 = "http://localhost:42461/internal/api/worker/hash/crack/task";
+    private final String resourceUrl1 = "http://worker1:8080/internal/api/worker/hash/crack/task";
+    private final String resourceUrl2 = "http://worker2:8080/internal/api/worker/hash/crack/task";
+    private final String resourceUrl3 = "http://worker3:8080/internal/api/worker/hash/crack/task";
 
     public String crackPassword(CrackPasswordDto crackPasswordDto) {
         String requestId = UUID.randomUUID().toString();
@@ -52,14 +53,14 @@ public class ManagerService {
     }
 
     private void addNewRequest(String requestId) {
-        requests.put(requestId, PasswordRequest.builder().status(READY).data(new CopyOnWriteArrayList<>())
+        requests.put(requestId, PasswordRequest.builder().status(IN_PROGRESS).data(new CopyOnWriteArrayList<>())
                 .successWork(0).build());
     }
 
     private void doRequests(CrackPasswordDto crackPasswordDto, String requestId) {
         doRequest(crackPasswordDto, 0, 3, resourceUrl1, requestId);
-        //doRequest(crackPasswordDto, 1, 3, resourceUrl2, requestId);
-        //doRequest(crackPasswordDto, 2, 3, resourceUrl3, requestId);
+        doRequest(crackPasswordDto, 1, 3, resourceUrl2, requestId);
+        doRequest(crackPasswordDto, 2, 3, resourceUrl3, requestId);
     }
 
     private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count, String url, String requestId) {
@@ -92,7 +93,7 @@ public class ManagerService {
         return crackHashManagerRequest;
     }
 
-    public void changeRequest(CrackHashWorkerResponse response) {
+     synchronized public void changeRequest(CrackHashWorkerResponse response) {
         String requestId = response.getRequestId();
         requests.get(requestId).getData().addAll(response.getAnswers().getWords());
         requests.get(requestId).setSuccessWork(requests.get(requestId).getSuccessWork() + 1);

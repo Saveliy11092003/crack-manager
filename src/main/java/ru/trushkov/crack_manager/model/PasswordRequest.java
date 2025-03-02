@@ -14,6 +14,6 @@ public class PasswordRequest {
 
     private CopyOnWriteArrayList<String> data;
     private Status status;
-    private Integer successWork = 0;
+    private Integer successWork;
 
 }
