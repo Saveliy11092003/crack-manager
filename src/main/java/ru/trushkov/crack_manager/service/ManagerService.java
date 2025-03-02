@@ -3,6 +3,8 @@ package ru.trushkov.crack_manager.service;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -31,7 +33,6 @@ public class ManagerService {
     private List<String> symbolsOfAlphabet;
 
     private final ConcurrentHashMap<String, PasswordRequest> requests = new ConcurrentHashMap<>();
-    private final RestTemplate restTemplate = new RestTemplate();
     private final String resourceUrl1 = "http://localhost:8081/internal/api/worker/hash/crack/task";
     private final String resourceUrl2 = "http://localhost:34579/internal/api/worker/hash/crack/task";
     private final String resourceUrl3 = "http://localhost:42461/internal/api/worker/hash/crack/task";
@@ -39,7 +40,7 @@ public class ManagerService {
     public String crackPassword(CrackPasswordDto crackPasswordDto) {
         String requestId = UUID.randomUUID().toString();
         addNewRequest(requestId);
-        doRequests(crackPasswordDto);
+        doRequests(crackPasswordDto, requestId);
         return requestId;
     }
 
@@ -51,26 +52,36 @@ public class ManagerService {
     }
 
     private void addNewRequest(String requestId) {
-        requests.put(requestId, PasswordRequest.builder().status(READY).build());
+        requests.put(requestId, PasswordRequest.builder().status(READY).data(new CopyOnWriteArrayList<>())
+                .successWork(0).build());
     }
 
-    private void doRequests(CrackPasswordDto crackPasswordDto) {
-        doRequest(crackPasswordDto, 0, 3, resourceUrl1);
-        //doRequest(crackPasswordDto, 1, 3, resourceUrl2);
-        //doRequest(crackPasswordDto, 2, 3, resourceUrl3);
+    private void doRequests(CrackPasswordDto crackPasswordDto, String requestId) {
+        doRequest(crackPasswordDto, 0, 3, resourceUrl1, requestId);
+        //doRequest(crackPasswordDto, 1, 3, resourceUrl2, requestId);
+        //doRequest(crackPasswordDto, 2, 3, resourceUrl3, requestId);
     }
 
-    private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count, String url) {
-        CrackHashManagerRequest crackHashManagerRequest = createCrackHashManagerRequest(crackPasswordDto, number, count);
-        Runnable runnable = () -> restTemplate.postForObject(url, crackHashManagerRequest, CrackHashManagerRequest.class);
+    private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count, String url, String requestId) {
+        RestTemplate restTemplate = new RestTemplate();
+        CrackHashManagerRequest crackHashManagerRequest = createCrackHashManagerRequest(crackPasswordDto, number, count, requestId);
+        System.out.println(crackHashManagerRequest.getAlphabet().getSymbols());
+        System.out.println(crackHashManagerRequest.getRequestId());
+        System.out.println(crackHashManagerRequest.getHash());
+        System.out.println(crackHashManagerRequest.getAlphabet().getSymbols());
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Content-Type", "application/json");
+        HttpEntity<CrackHashManagerRequest> request = new HttpEntity<>(crackHashManagerRequest, headers);
+        Runnable runnable = () -> {
+            restTemplate.postForObject(url, request, CrackHashManagerRequest.class);
+        };
         Thread requestThread = new Thread(runnable);
         requestThread.start();
     }
 
-    private CrackHashManagerRequest createCrackHashManagerRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count) {
+    private CrackHashManagerRequest createCrackHashManagerRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count, String requestId) {
         CrackHashManagerRequest crackHashManagerRequest = new CrackHashManagerRequest();
         crackHashManagerRequest.setHash(crackPasswordDto.getHash());
-        String requestId = UUID.randomUUID().toString();
         crackHashManagerRequest.setRequestId(requestId);
         CrackHashManagerRequest.Alphabet alphabet = new CrackHashManagerRequest.Alphabet();
         alphabet.getSymbols().addAll(symbolsOfAlphabet);
@@ -81,4 +92,12 @@ public class ManagerService {
         return crackHashManagerRequest;
     }
 
+    public void changeRequest(CrackHashWorkerResponse response) {
+        String requestId = response.getRequestId();
+        requests.get(requestId).getData().addAll(response.getAnswers().getWords());
+        requests.get(requestId).setSuccessWork(requests.get(requestId).getSuccessWork() + 1);
+        if (requests.get(requestId).getSuccessWork() == 3) {
+            requests.get(requestId).setStatus(READY);
+        }
+    }
 }
