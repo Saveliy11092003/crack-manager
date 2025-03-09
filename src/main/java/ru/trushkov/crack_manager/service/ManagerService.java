@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -21,11 +22,10 @@ import ru.trushkov.crack_manager.model.PasswordRequest;
 import ru.trushkov.crack_manager.model.enumeration.Status;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import static ru.trushkov.crack_manager.model.enumeration.Status.IN_PROGRESS;
-import static ru.trushkov.crack_manager.model.enumeration.Status.READY;
+import static ru.trushkov.crack_manager.model.enumeration.Status.*;
 
 @Service
 public class ManagerService {
@@ -34,14 +34,52 @@ public class ManagerService {
     private List<String> symbolsOfAlphabet;
 
     private final ConcurrentHashMap<String, PasswordRequest> requests = new ConcurrentHashMap<>();
-    private final String resourceUrl1 = "http://worker1:8080/internal/api/worker/hash/crack/task";
-    private final String resourceUrl2 = "http://worker2:8080/internal/api/worker/hash/crack/task";
-    private final String resourceUrl3 = "http://worker3:8080/internal/api/worker/hash/crack/task";
+
+    private BlockingQueue<CrackPasswordDto> requestQueue = new LinkedBlockingQueue<>();
+
+    @Value("${workers.urls.crack.task}")
+    private List<String> urlsCrackPassword;
+
+    @Value("${workers.urls.index}")
+    private List<String> urlsIndex;
+
+    @Value("${workers.count}")
+    private Integer workersCount;
+
+    private AtomicBoolean canWork = new AtomicBoolean(true);
+
+    public ManagerService() {
+        startProcessingQueue();
+    }
+
+    public void startProcessingQueue() {
+        Runnable processor = () -> {
+            while (true) {
+                if (canWork.get()) {
+                    try {
+                        canWork.set(false);
+                        System.out.println("can work = false");
+                        CrackPasswordDto passwordDto = requestQueue.take();
+                        System.out.println("startProcessingQueue " + passwordDto.getRequestId());
+                        if (passwordDto != null) {
+                            doRequests(passwordDto);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        };
+        Thread thread = new Thread(processor);
+        thread.start();
+    }
 
     public String crackPassword(CrackPasswordDto crackPasswordDto) {
         String requestId = UUID.randomUUID().toString();
-        addNewRequest(requestId);
-        doRequests(crackPasswordDto, requestId);
+        crackPasswordDto.setRequestId(requestId);
+        addNewRequest(crackPasswordDto);
+        //doRequests(crackPasswordDto);
         return requestId;
     }
 
@@ -52,20 +90,22 @@ public class ManagerService {
         return passwordDto;
     }
 
-    private void addNewRequest(String requestId) {
-        requests.put(requestId, PasswordRequest.builder().status(IN_PROGRESS).data(new CopyOnWriteArrayList<>())
-                .successWork(0).build());
+    private void addNewRequest(CrackPasswordDto crackPasswordDto) {
+        requests.put(crackPasswordDto.getRequestId(), PasswordRequest.builder().status(IN_PROGRESS).data(new CopyOnWriteArrayList<>())
+                .successWork(0).maxLength(crackPasswordDto.getLength()).build());
+        requestQueue.add(crackPasswordDto);
     }
 
-    private void doRequests(CrackPasswordDto crackPasswordDto, String requestId) {
-        doRequest(crackPasswordDto, 0, 3, resourceUrl1, requestId);
-        doRequest(crackPasswordDto, 1, 3, resourceUrl2, requestId);
-        doRequest(crackPasswordDto, 2, 3, resourceUrl3, requestId);
+    private void doRequests(CrackPasswordDto crackPasswordDto) {
+        System.out.println("do request");
+        for (int i = 0; i < workersCount; i++) {
+            doRequest(crackPasswordDto, i, urlsCrackPassword.get(i), crackPasswordDto.getRequestId());
+        }
     }
 
-    private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count, String url, String requestId) {
+    private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, String url, String requestId) {
         RestTemplate restTemplate = new RestTemplate();
-        CrackHashManagerRequest crackHashManagerRequest = createCrackHashManagerRequest(crackPasswordDto, number, count, requestId);
+        CrackHashManagerRequest crackHashManagerRequest = createCrackHashManagerRequest(crackPasswordDto, number, requestId);
         System.out.println(crackHashManagerRequest.getAlphabet().getSymbols());
         System.out.println(crackHashManagerRequest.getRequestId());
         System.out.println(crackHashManagerRequest.getHash());
@@ -80,7 +120,7 @@ public class ManagerService {
         requestThread.start();
     }
 
-    private CrackHashManagerRequest createCrackHashManagerRequest(CrackPasswordDto crackPasswordDto, Integer number, Integer count, String requestId) {
+    private CrackHashManagerRequest createCrackHashManagerRequest(CrackPasswordDto crackPasswordDto, Integer number, String requestId) {
         CrackHashManagerRequest crackHashManagerRequest = new CrackHashManagerRequest();
         crackHashManagerRequest.setHash(crackPasswordDto.getHash());
         crackHashManagerRequest.setRequestId(requestId);
@@ -89,7 +129,7 @@ public class ManagerService {
         crackHashManagerRequest.setAlphabet(alphabet);
         crackHashManagerRequest.setMaxLength(crackPasswordDto.getLength());
         crackHashManagerRequest.setPartNumber(number);
-        crackHashManagerRequest.setPartCount(count);
+        crackHashManagerRequest.setPartCount(workersCount);
         return crackHashManagerRequest;
     }
 
@@ -99,6 +139,30 @@ public class ManagerService {
         requests.get(requestId).setSuccessWork(requests.get(requestId).getSuccessWork() + 1);
         if (requests.get(requestId).getSuccessWork() == 3) {
             requests.get(requestId).setStatus(READY);
+            canWork.set(true);
+            System.out.println("can work = true");
         }
+    }
+
+    synchronized public void updateRequestsAfterErrorHealthCheck() {
+        for (Map.Entry<String, PasswordRequest> entry : requests.entrySet()) {
+            if (entry.getValue().getSuccessWork() != 3) {
+                entry.getValue().setStatus(ERROR);
+            }
+        }
+    }
+
+    public long getPercent(String requestId) {
+        RestTemplate restTemplate = new RestTemplate();
+        long currentCount = 0;
+        for (String url : urlsIndex) {
+            currentCount += restTemplate.postForObject(url, requestId, Integer.class);
+            System.out.println("current in cycle " + currentCount);
+        }
+        System.out.println("current after cycle " + currentCount);
+        long totalCount = (long) Math.pow(36, requests.get(requestId).getMaxLength());
+        System.out.println("total " + totalCount);
+        System.out.println("100 * total " + currentCount / totalCount * 100);
+        return 100 * currentCount / totalCount;
     }
 }

@@ -24,4 +24,8 @@ public class ManagerController {
         return ResponseEntity.ok(managerService.getPasswords(requestId));
     }
 
+    @GetMapping("/percent")
+    public ResponseEntity<Long> getPercent(@RequestParam("requestId") String requestId) {
+        return ResponseEntity.ok(managerService.getPercent(requestId));
+    }
 }

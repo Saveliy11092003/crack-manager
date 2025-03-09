@@ -18,4 +18,6 @@ public class CrackPasswordDto {
     @NotNull
     private Integer length;
 
+    private String requestId;
+
 }
