@@ -2,6 +2,8 @@ package ru.trushkov.crack_manager.service;
 
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -19,8 +21,11 @@ import ru.nsu.ccfit.schema.crack_hash_response.CrackHashWorkerResponse;
 import ru.trushkov.crack_manager.model.CrackPasswordDto;
 import ru.trushkov.crack_manager.model.PasswordDto;
 import ru.trushkov.crack_manager.model.PasswordRequest;
+import ru.trushkov.crack_manager.model.entity.Request;
 import ru.trushkov.crack_manager.model.enumeration.Status;
+import ru.trushkov.crack_manager.repository.RequestRepository;
 
+import java.sql.SQLOutput;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static ru.trushkov.crack_manager.model.enumeration.Status.*;
 
 @Service
+@RequiredArgsConstructor
 public class ManagerService {
 
     @Value("${alphabet}")
@@ -48,10 +54,14 @@ public class ManagerService {
 
     private AtomicBoolean canWork = new AtomicBoolean(true);
 
-    public ManagerService() {
-        startProcessingQueue();
-    }
+    private final RequestRepository repository;
 
+    private final AmqpTemplate amqpTemplate;
+
+    @Value("${exchange.name}")
+    private String exchangeName;
+
+/*
     public void startProcessingQueue() {
         Runnable processor = () -> {
             while (true) {
@@ -74,13 +84,27 @@ public class ManagerService {
         Thread thread = new Thread(processor);
         thread.start();
     }
-
+*/
     public String crackPassword(CrackPasswordDto crackPasswordDto) {
         String requestId = UUID.randomUUID().toString();
         crackPasswordDto.setRequestId(requestId);
+        System.out.println("do");
+        addRequestToBD(crackPasswordDto);
         addNewRequest(crackPasswordDto);
-        //doRequests(crackPasswordDto);
+        System.out.println(getRequest(requestId));
+        doRequests(crackPasswordDto);
+        System.out.println("posle");
         return requestId;
+    }
+
+    private Request getRequest(String id) {
+        return repository.findById(id).get();
+    }
+
+    private void addRequestToBD(CrackPasswordDto crackPasswordDto) {
+        Request request = Request.builder().id(crackPasswordDto.getRequestId()).length(crackPasswordDto.getLength())
+                .hash(crackPasswordDto.getHash()).build();
+        repository.save(request);
     }
 
     public PasswordDto getPasswords(String requestId) {
@@ -103,25 +127,19 @@ public class ManagerService {
     private void doRequests(CrackPasswordDto crackPasswordDto) {
         System.out.println("do request");
         for (int i = 0; i < workersCount; i++) {
-            doRequest(crackPasswordDto, i, urlsCrackPassword.get(i), crackPasswordDto.getRequestId());
+            doRequest(crackPasswordDto, i, crackPasswordDto.getRequestId());
         }
     }
 
-    private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, String url, String requestId) {
-        RestTemplate restTemplate = new RestTemplate();
+    private void doRequest(CrackPasswordDto crackPasswordDto, Integer number, String requestId) {
         CrackHashManagerRequest crackHashManagerRequest = createCrackHashManagerRequest(crackPasswordDto, number, requestId);
         System.out.println(crackHashManagerRequest.getAlphabet().getSymbols());
         System.out.println(crackHashManagerRequest.getRequestId());
         System.out.println(crackHashManagerRequest.getHash());
         System.out.println(crackHashManagerRequest.getAlphabet().getSymbols());
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Content-Type", "application/json");
-        HttpEntity<CrackHashManagerRequest> request = new HttpEntity<>(crackHashManagerRequest, headers);
-        Runnable runnable = () -> {
-            restTemplate.postForObject(url, request, CrackHashManagerRequest.class);
-        };
-        Thread requestThread = new Thread(runnable);
-        requestThread.start();
+        System.out.println("do convert");
+        amqpTemplate.convertAndSend(exchangeName, "task.worker" + (number+1), crackHashManagerRequest);
+        System.out.println("posle convert");
     }
 
     private CrackHashManagerRequest createCrackHashManagerRequest(CrackPasswordDto crackPasswordDto, Integer number, String requestId) {
