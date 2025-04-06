@@ -159,7 +159,7 @@ public class ManagerService {
     @RabbitListener(queues = "response_queue")
      synchronized public void changeRequest(CrackHashWorkerResponse response) {
         String requestId = response.getRequestId();
-        System.out.println("RESPONSE " + response.getAnswers().getWords().get(0) + " " + response.getPartNumber() + " " + response.getRequestId());
+     //   System.out.println("RESPONSE " + response.getAnswers().getWords().get(0) + " " + response.getPartNumber() + " " + response.getRequestId());
         requests.get(requestId).getData().addAll(response.getAnswers().getWords());
         requests.get(requestId).setSuccessWork(requests.get(requestId).getSuccessWork() + 1);
         if (requests.get(requestId).getSuccessWork() == 3) {
