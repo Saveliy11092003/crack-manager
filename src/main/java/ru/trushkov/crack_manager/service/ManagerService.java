@@ -129,7 +129,7 @@ public class ManagerService {
 
     private PasswordDto getPasswordDto(List<Response> responses) {
         PasswordDto passwordDto = new PasswordDto();
-        if (responses.size() == 3) {
+        if (responses.size() >= 3) {
             passwordDto.setStatus(READY);
         } else if (!responses.isEmpty()) {
             passwordDto.setStatus(PARTIAL_READY);
@@ -166,7 +166,7 @@ public class ManagerService {
         System.out.println(crackHashManagerRequest.getHash());
         System.out.println(crackHashManagerRequest.getAlphabet().getSymbols());
         System.out.println("do convert");
-        amqpTemplate.convertAndSend(exchangeName, "task.worker" + (number+1), crackHashManagerRequest,
+        amqpTemplate.convertAndSend(exchangeName, "task.worker1", crackHashManagerRequest,
                 message -> {
                     message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
                     return message;
