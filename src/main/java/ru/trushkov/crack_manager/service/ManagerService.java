@@ -3,6 +3,7 @@ package ru.trushkov.crack_manager.service;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -89,9 +90,9 @@ public class ManagerService {
         String requestId = UUID.randomUUID().toString();
         crackPasswordDto.setRequestId(requestId);
         System.out.println("do");
-        addRequestToBD(crackPasswordDto);
+      //  addRequestToBD(crackPasswordDto);
         addNewRequest(crackPasswordDto);
-        System.out.println(getRequest(requestId));
+    //    System.out.println(getRequest(requestId));
         doRequests(crackPasswordDto);
         System.out.println("posle");
         return requestId;
@@ -155,8 +156,10 @@ public class ManagerService {
         return crackHashManagerRequest;
     }
 
+    @RabbitListener(queues = "response_queue")
      synchronized public void changeRequest(CrackHashWorkerResponse response) {
         String requestId = response.getRequestId();
+        System.out.println("RESPONSE " + response.getAnswers().getWords().get(0) + " " + response.getPartNumber() + " " + response.getRequestId());
         requests.get(requestId).getData().addAll(response.getAnswers().getWords());
         requests.get(requestId).setSuccessWork(requests.get(requestId).getSuccessWork() + 1);
         if (requests.get(requestId).getSuccessWork() == 3) {
@@ -171,9 +174,10 @@ public class ManagerService {
             System.out.println("success work" + entry.getValue().getSuccessWork());
             if (entry.getValue().getSuccessWork() > 0 && !entry.getValue().getSuccessWork().equals(workersCount)) {
                 entry.getValue().setStatus(PARTIAL_READY);
-            } else if (entry.getValue().getSuccessWork() == 0) {
-                entry.getValue().setStatus(ERROR);
             }
+            //else if (entry.getValue().getSuccessWork() == 0) {
+            //    entry.getValue().setStatus(ERROR);
+            //}
         }
     }
 
