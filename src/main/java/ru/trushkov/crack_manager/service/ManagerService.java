@@ -3,6 +3,9 @@ package ru.trushkov.crack_manager.service;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageDeliveryMode;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -113,9 +116,9 @@ public class ManagerService {
     }
 
     public PasswordDto getPasswords(String requestId) {
-        PasswordRequest passwordRequest = requests.get(requestId);
-        PasswordDto passwordDto = PasswordDto.builder().data(passwordRequest.getData())
-                .status(passwordRequest.getStatus()).build();
+    //    PasswordRequest passwordRequest = requests.get(requestId);
+     //   PasswordDto passwordDto = PasswordDto.builder().data(passwordRequest.getData())
+     //           .status(passwordRequest.getStatus()).build();
 
         List<Response> responses = responseRepository.findAllByRequestId(requestId);
         System.out.println("RESPONSES " + responses);
@@ -133,7 +136,7 @@ public class ManagerService {
         } else {
             passwordDto.setStatus(IN_PROGRESS);
         }
-        List<String> data = new ArrayList<>();
+        Set<String> data = new HashSet<>();
         responses.forEach((r) -> data.addAll(r.getAnswers()));
         passwordDto.setData(data);
         return passwordDto;
@@ -163,7 +166,11 @@ public class ManagerService {
         System.out.println(crackHashManagerRequest.getHash());
         System.out.println(crackHashManagerRequest.getAlphabet().getSymbols());
         System.out.println("do convert");
-        amqpTemplate.convertAndSend(exchangeName, "task.worker" + (number+1), crackHashManagerRequest);
+        amqpTemplate.convertAndSend(exchangeName, "task.worker" + (number+1), crackHashManagerRequest,
+                message -> {
+                    message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+                    return message;
+                });
         System.out.println("posle convert");
     }
 
@@ -184,12 +191,17 @@ public class ManagerService {
      synchronized public void changeRequest(CrackHashWorkerResponse response) {
         String requestId = response.getRequestId();
      //   System.out.println("RESPONSE " + response.getAnswers().getWords().get(0) + " " + response.getPartNumber() + " " + response.getRequestId());
-        requests.get(requestId).getData().addAll(response.getAnswers().getWords());
-        requests.get(requestId).setSuccessWork(requests.get(requestId).getSuccessWork() + 1);
-        if (requests.get(requestId).getSuccessWork() == 3) {
-            requests.get(requestId).setStatus(READY);
-            canWork.set(true);
-            System.out.println("can work = true");
+    //    requests.get(requestId).getData().addAll(response.getAnswers().getWords());
+    //    requests.get(requestId).setSuccessWork(requests.get(requestId).getSuccessWork() + 1);
+   //     if (requests.get(requestId).getSuccessWork() == 3) {
+   //         requests.get(requestId).setStatus(READY);
+   //         canWork.set(true);
+   //         System.out.println("can work = true");
+  //      }
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
         addResponseToBD(response);
     }
