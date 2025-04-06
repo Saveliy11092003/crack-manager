@@ -23,8 +23,10 @@ import ru.trushkov.crack_manager.model.CrackPasswordDto;
 import ru.trushkov.crack_manager.model.PasswordDto;
 import ru.trushkov.crack_manager.model.PasswordRequest;
 import ru.trushkov.crack_manager.model.entity.Request;
+import ru.trushkov.crack_manager.model.entity.Response;
 import ru.trushkov.crack_manager.model.enumeration.Status;
 import ru.trushkov.crack_manager.repository.RequestRepository;
+import ru.trushkov.crack_manager.repository.ResponseRepository;
 
 import java.sql.SQLOutput;
 import java.util.*;
@@ -56,6 +58,8 @@ public class ManagerService {
     private AtomicBoolean canWork = new AtomicBoolean(true);
 
     private final RequestRepository repository;
+
+    private final ResponseRepository responseRepository;
 
     private final AmqpTemplate amqpTemplate;
 
@@ -90,9 +94,9 @@ public class ManagerService {
         String requestId = UUID.randomUUID().toString();
         crackPasswordDto.setRequestId(requestId);
         System.out.println("do");
-      //  addRequestToBD(crackPasswordDto);
+        addRequestToBD(crackPasswordDto);
         addNewRequest(crackPasswordDto);
-    //    System.out.println(getRequest(requestId));
+        System.out.println(getRequest(requestId));
         doRequests(crackPasswordDto);
         System.out.println("posle");
         return requestId;
@@ -112,6 +116,26 @@ public class ManagerService {
         PasswordRequest passwordRequest = requests.get(requestId);
         PasswordDto passwordDto = PasswordDto.builder().data(passwordRequest.getData())
                 .status(passwordRequest.getStatus()).build();
+
+        List<Response> responses = responseRepository.findAllByRequestId(requestId);
+        System.out.println("RESPONSES " + responses);
+        PasswordDto passwordDto1 = getPasswordDto(responses);
+        System.out.println("FINALLY RESPONSE " + responses);
+        return passwordDto1;
+    }
+
+    private PasswordDto getPasswordDto(List<Response> responses) {
+        PasswordDto passwordDto = new PasswordDto();
+        if (responses.size() == 3) {
+            passwordDto.setStatus(READY);
+        } else if (!responses.isEmpty()) {
+            passwordDto.setStatus(PARTIAL_READY);
+        } else {
+            passwordDto.setStatus(IN_PROGRESS);
+        }
+        List<String> data = new ArrayList<>();
+        responses.forEach((r) -> data.addAll(r.getAnswers()));
+        passwordDto.setData(data);
         return passwordDto;
     }
 
@@ -167,6 +191,13 @@ public class ManagerService {
             canWork.set(true);
             System.out.println("can work = true");
         }
+        addResponseToBD(response);
+    }
+
+    private void addResponseToBD(CrackHashWorkerResponse crackHashWorkerResponse) {
+        Response response = Response.builder().id(UUID.randomUUID().toString()).answers(crackHashWorkerResponse.getAnswers().getWords())
+                .partNumber(crackHashWorkerResponse.getPartNumber()).requestId(crackHashWorkerResponse.getRequestId()).build();
+        responseRepository.save(response);
     }
 
     synchronized public void updateRequestsAfterErrorHealthCheck() {
