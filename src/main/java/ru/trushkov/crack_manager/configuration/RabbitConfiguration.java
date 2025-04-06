@@ -33,17 +33,17 @@ public class RabbitConfiguration {
 
     @Bean("requestQueue1")
     public Queue requestQueue1() {
-        return new Queue(requestQueueName1);
+        return new Queue(requestQueueName1, true);
     }
 
     @Bean("requestQueue2")
     public Queue requestQueue2() {
-        return new Queue(requestQueueName2);
+        return new Queue(requestQueueName2, true);
     }
 
     @Bean("requestQueue3")
     public Queue requestQueue3() {
-        return new Queue(requestQueueName3);
+        return new Queue(requestQueueName3, true);
     }
 
     @Bean
