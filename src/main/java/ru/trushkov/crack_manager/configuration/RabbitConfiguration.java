@@ -22,11 +22,8 @@ public class RabbitConfiguration {
     @Value("${queue.request.worker1}")
     private String requestQueueName1;
 
-    @Value("${queue.request.worker2}")
-    private String requestQueueName2;
-
-    @Value("${queue.request.worker3}")
-    private String requestQueueName3;
+    @Value("${queue.response}")
+    private String responseQueueName;
 
     @Value("${exchange.name}")
     private String exchangeName;
@@ -44,6 +41,16 @@ public class RabbitConfiguration {
     @Bean
     public Binding binding1(Queue requestQueue1, DirectExchange exchange) {
         return BindingBuilder.bind(requestQueue1).to(exchange).with("task.worker1");
+    }
+
+    @Bean("responseQueue")
+    public Queue responseQueue() {
+        return new Queue(responseQueueName, true);
+    }
+
+    @Bean
+    public Binding binding2(Queue responseQueue, DirectExchange exchange) {
+        return BindingBuilder.bind(responseQueue).to(exchange).with("task.manager");
     }
 
 
@@ -92,7 +99,7 @@ public class RabbitConfiguration {
 
     @Bean(name = "receiveConnectionFactory")
     public CachingConnectionFactory receiveConnectionFactory() {
-        CachingConnectionFactory factory = new CachingConnectionFactory("rabbitmq2", 5672);
+        CachingConnectionFactory factory = new CachingConnectionFactory("rabbitmq1", 5672);
         return factory;
     }
 
