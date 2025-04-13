@@ -8,6 +8,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -68,6 +69,8 @@ public class ManagerService {
 
     @Value("${exchange.name}")
     private String exchangeName;
+
+    private final ConnectionFactory connectionFactory;
 
     private final MongoTemplate mongoTemplate;
 
@@ -175,11 +178,11 @@ public class ManagerService {
    //         canWork.set(true);
    //         System.out.println("can work = true");
   //      }
-        try {
+ /*       try {
             Thread.sleep(5000);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
-        }
+        }*/
         addResponseToBD(response);
     }
 
@@ -190,28 +193,38 @@ public class ManagerService {
     }
 
     public long getPercent(String requestId) {
-        RestTemplate restTemplate = new RestTemplate();
-        long currentCount = 0;
-        for (String url : urlsIndex) {
-            Integer part = null;
-            try {
-                part = restTemplate.postForObject(url, requestId, Integer.class);
-            } catch (Exception e) {
-                System.out.println("Error while getting index : " + e.getMessage());
-            }
-            if (part != null) {
-                currentCount += part;
-            }
-            System.out.println("current in cycle " + currentCount);
+
+        try {
+            connectionFactory.createConnection().close();
+        } catch (Exception e) {
+            System.out.println("RabbitMQ is unavailable: " + e.getMessage());
+            return 0;
         }
-        System.out.println("current after cycle " + currentCount);
-        long totalCount = (long) Math.pow(36, repository.findById(requestId).get().getLength());
-        System.out.println("total " + totalCount);
-        System.out.println("100 * total " + currentCount / totalCount * 100);
-        if (responseRepository.findAllByRequestId(requestId).size() == 3) {
+        List<Response> responses = responseRepository.findAllByRequestId(requestId);
+        List<String> answers = responses.stream().flatMap(response -> response.getAnswers().stream()).toList();
+        if (responses.size() >= 3 && !answers.isEmpty()) {
             return 100;
+        } else {
+            RestTemplate restTemplate = new RestTemplate();
+            long currentCount = 0;
+            for (String url : urlsIndex) {
+                Integer part = null;
+                try {
+                    part = restTemplate.postForObject(url, requestId, Integer.class);
+                } catch (Exception e) {
+                    System.out.println("Error while getting index : " + e.getMessage());
+                }
+                if (part != null) {
+                    currentCount += part;
+                }
+                System.out.println("current in cycle " + currentCount);
+            }
+            System.out.println("current after cycle " + currentCount);
+            long totalCount = (long) Math.pow(36, repository.findById(requestId).get().getLength());
+            System.out.println("total " + totalCount);
+            System.out.println("100 * total " + currentCount / totalCount * 100);
+            return 100 * currentCount / totalCount;
         }
-        return 100 * currentCount / totalCount;
     }
 
     public void sendUnsentRequest() {
